@@ -4,7 +4,8 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises; // Use fs.promises for async/await
+const fs = require('fs').promises;
+const { MongoClient, ServerApiVersion } = require('mongodb'); // Import required MongoDB components
 
 // Create directories if they do not exist
 const ensureDirectoriesExist = async () => {
@@ -25,17 +26,22 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' })); // Increase limit if needed
+app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/drawings', express.static(path.join(__dirname, 'drawings')));
 
 // MongoDB Connection
-mongoose.connect('mongodb://localhost:27017/digital-library', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+const username = encodeURIComponent("shiwang");
+const password = encodeURIComponent("shiwang");
+// MongoDB connection URI
+const uri = `mongodb+srv://${username}:${password}@cluster0.ytjenqf.mongodb.net/noteboard?retryWrites=true&w=majority`;
+
+// Initialize Mongoose connection
+mongoose.connect(uri, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('MongoDB connection error:', err));
 
 // Define PDF Schema and Model
 const pdfSchema = new mongoose.Schema({
@@ -74,30 +80,26 @@ app.post('/upload', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Get the file size
     const fileSize = req.file.size;
 
-    // Check if file size is correctly obtained
     console.log('File size:', fileSize);
 
     const newPDF = new PDF({
       title: req.body.title,
       description: req.body.description,
       filePath: req.file.path,
-      size: fileSize, // Save the file size
+      size: fileSize,
       uploadDate: new Date(),
-      author: req.body.author, // Make sure you also handle author
+      author: req.body.author,
     });
 
     await newPDF.save();
     res.status(201).send(newPDF);
   } catch (error) {
-    console.error('Error uploading file:', error); // Log error to debug
+    console.error('Error uploading file:', error);
     res.status(500).send(error);
   }
 });
-
-
 
 app.get('/pdfs', async (req, res) => {
   try {
@@ -108,7 +110,6 @@ app.get('/pdfs', async (req, res) => {
     res.status(500).json({ error: 'Server Error' });
   }
 });
-
 
 // Drawing Routes
 const base64ToBuffer = (dataURI) => {
@@ -190,7 +191,6 @@ app.delete('/drawings/:filename', async (req, res) => {
     await fs.access(filePath);
     await fs.unlink(filePath);
 
-    // Remove drawing from database
     await Drawing.deleteOne({ filePath: `/drawings/${filename}` });
     res.status(200).json({ message: 'Image deleted successfully.' });
   } catch (error) {
